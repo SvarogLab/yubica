@@ -1229,6 +1229,7 @@ dependencies = [
  "pem-rfc7468 1.0.0",
  "pkcs8",
  "rand",
+ "signature",
  "thiserror",
  "tracing",
  "tracing-subscriber",

@@ -7,6 +7,7 @@ mod logger;
 mod pki;
 
 pub mod commands {
+    pub mod gen_crl;
     pub mod get_ca;
     pub mod init_ca;
     pub mod issue_host;

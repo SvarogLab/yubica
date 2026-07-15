@@ -8,6 +8,7 @@ pub struct SlotsDefaults;
 pub struct GetCaDefaults;
 pub struct IoDefaults;
 pub struct HostDefaults;
+pub struct CrlDefaults;
 
 impl LoggingDefaults {
     pub const fn level() -> LogLevel {
@@ -65,6 +66,12 @@ impl CsrDefaults {
     pub const SLOT: &str = CaDefaults::SLOT;
     pub const VALID_YEARS: u16 = CaDefaults::VALID_YEARS;
     pub const FILENAME: &str = "issued-certificate";
+}
+
+impl CrlDefaults {
+    pub const SLOT: &str = CaDefaults::SLOT;
+    pub const NEXT_UPDATE_DAYS: u32 = 30;
+    pub const FILENAME: &str = "revoked";
 }
 
 impl IoDefaults {

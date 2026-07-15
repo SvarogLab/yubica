@@ -14,11 +14,12 @@ use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use x509_cert::der::Decode;
 use yubica::cli::{
-    CliAlgorithm, CliPinPolicy, CliTouchPolicy, GetCaArgs, InitCaArgs, IssueHostArgs, PinArg,
-    SignCsrArgs, ValidityArgs,
+    CliAlgorithm, CliPinPolicy, CliTouchPolicy, GenCrlArgs, GetCaArgs, InitCaArgs, IssueHostArgs,
+    PinArg, SignCsrArgs, ValidityArgs,
 };
-use yubica::commands::{get_ca, init_ca, issue_host, sign_csr};
+use yubica::commands::{gen_crl, get_ca, init_ca, issue_host, sign_csr};
 use yubikey::piv::SlotId;
 
 struct TempDir(PathBuf);
@@ -157,6 +158,7 @@ fn init_ca_then_issue_host_round_trip() {
             pin: Some(pin.clone()),
         },
         passwd: None,
+        crl_url: Vec::new(),
         iopath: dir.path().to_path_buf(),
         filename: "hardware-test-host".into(),
     };
@@ -185,6 +187,7 @@ fn init_ca_then_issue_host_round_trip() {
             pin: Some(pin.clone()),
         },
         ca: false,
+        crl_url: vec!["http://ca.example.internal/root.crl".into()],
         iopath: dir.path().to_path_buf(),
         filename: "sign-test-ca-request".into(),
     };
@@ -218,11 +221,88 @@ fn init_ca_then_issue_host_round_trip() {
             valid_months: None,
             valid_days: Some(1),
         },
-        pin: PinArg { pin: Some(pin) },
+        pin: PinArg {
+            pin: Some(pin.clone()),
+        },
         ca: false,
+        crl_url: Vec::new(),
         iopath: dir.path().to_path_buf(),
         filename: "sign-test-leaf".into(),
     };
     sign_csr::run(&sign_leaf).expect("sign-csr without --ca should sign a non-ca csr");
     assert!(dir.path().join("sign-test-leaf.crt").exists());
+
+    // gen-crl: revoke the intermediate signed above and confirm its serial
+    // shows up in the resulting, YubiKey-signed CRL. Output files are PEM
+    // (see `export_certificate_pem`/`gen_crl::run`), so decode that first.
+    let issued_pem =
+        std::fs::read(dir.path().join("sign-test-ca-request.crt")).expect("read issued cert");
+    let (_, issued_der) = pem_rfc7468::decode_vec(&issued_pem).expect("decode issued cert pem");
+    let issued_cert =
+        x509_cert::Certificate::from_der(&issued_der).expect("parse issued intermediate cert");
+
+    // --crl-url should have added a CRLDistributionPoints extension pointing
+    // at the URL given to sign-csr above.
+    {
+        use const_oid::AssociatedOid;
+        use x509_cert::ext::pkix::CrlDistributionPoints;
+        use x509_cert::ext::pkix::name::{DistributionPointName, GeneralName};
+
+        let crl_distribution_points = issued_cert
+            .tbs_certificate
+            .extensions
+            .as_ref()
+            .into_iter()
+            .flatten()
+            .find(|ext| ext.extn_id == CrlDistributionPoints::OID)
+            .map(|ext| {
+                CrlDistributionPoints::from_der(ext.extn_value.as_bytes())
+                    .expect("decode crl distribution points")
+            })
+            .expect("sign-csr --crl-url should add a CRLDistributionPoints extension");
+
+        let url = match &crl_distribution_points.0[0].distribution_point {
+            Some(DistributionPointName::FullName(names)) => match &names[0] {
+                GeneralName::UniformResourceIdentifier(uri) => uri.as_str(),
+                other => panic!("expected a URI general name, got {other:?}"),
+            },
+            other => panic!("expected a fullName distribution point, got {other:?}"),
+        };
+        assert_eq!(url, "http://ca.example.internal/root.crl");
+    }
+
+    let revoked_serial_hex = hex::encode(issued_cert.tbs_certificate.serial_number.as_bytes());
+
+    let revoked_list_path = dir.path().join("revoked-list.txt");
+    std::fs::write(
+        &revoked_list_path,
+        format!("{revoked_serial_hex},2026-01-01,key-compromise\n"),
+    )
+    .expect("write revoked list");
+
+    let gen_crl_args = GenCrlArgs {
+        serial,
+        slot: test_slot(),
+        revoked: revoked_list_path,
+        next_update_days: 7,
+        crl_number: Some(1),
+        pin: PinArg { pin: Some(pin) },
+        iopath: dir.path().to_path_buf(),
+        filename: "hardware-test".into(),
+    };
+    gen_crl::run(&gen_crl_args)
+        .expect("gen-crl should sign a crl listing the revoked intermediate");
+
+    let crl_pem = std::fs::read(dir.path().join("hardware-test.crl")).expect("read generated crl");
+    let (_, crl_der) = pem_rfc7468::decode_vec(&crl_pem).expect("decode generated crl pem");
+    let crl = x509_cert::crl::CertificateList::from_der(&crl_der).expect("parse generated crl");
+    let revoked_certificates = crl
+        .tbs_cert_list
+        .revoked_certificates
+        .expect("crl should list the revoked intermediate");
+    assert_eq!(revoked_certificates.len(), 1);
+    assert_eq!(
+        revoked_certificates[0].serial_number.as_bytes(),
+        issued_cert.tbs_certificate.serial_number.as_bytes()
+    );
 }

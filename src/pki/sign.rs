@@ -18,15 +18,27 @@ use crate::{
     hardware::device::{export_certificate_pem, print_certificate_details},
     io::OutputPlan,
     pki::{
-        algorithm::detect_algorithm, csr::add_supported_csr_extensions,
+        algorithm::detect_algorithm,
+        csr::{add_crl_distribution_points, add_supported_csr_extensions},
         serial::generate_serial_number,
     },
 };
 
+/// Choices that shape how a certificate is signed, orthogonal to the CSR
+/// itself: whether to force CA semantics (`--ca`), and which CRL URLs (if
+/// any) to advertise via a `CRLDistributionPoints` extension. Bundled into
+/// one struct so this list can grow without the sign functions below
+/// accumulating more positional parameters.
+pub struct SignOptions<'a> {
+    pub force_ca: bool,
+    pub crl_urls: &'a [String],
+}
+
 /// Signs `csr` against `ca_cert` and exports the resulting certificate to
 /// `output`, printing its details. Shared by `sign-csr` and `issue-host`,
 /// which differ only in the log line they emit once this returns and in
-/// `force_ca` (always `false` for `issue-host`, which never issues a CA).
+/// `options.force_ca` (always `false` for `issue-host`, which never issues a
+/// CA).
 ///
 /// `csr_extensions` is the CSR's already-decoded requested-extensions list
 /// (see `pki::csr::csr_requested_extensions`); it's taken as a parameter
@@ -40,7 +52,7 @@ pub fn sign_and_export(
     csr: &CertReq,
     csr_extensions: &[Extension],
     validity: Validity,
-    force_ca: bool,
+    options: &SignOptions<'_>,
     output: &OutputPlan,
 ) -> Result<Certificate, AppError> {
     let cert = sign_loaded_csr(
@@ -50,7 +62,7 @@ pub fn sign_and_export(
         csr,
         csr_extensions,
         validity,
-        force_ca,
+        options,
     )?;
     export_certificate_pem(&cert, &output.crt_path())?;
     print_certificate_details(slot, &cert);
@@ -64,7 +76,7 @@ pub fn sign_loaded_csr(
     csr: &CertReq,
     csr_extensions: &[Extension],
     validity: Validity,
-    force_ca: bool,
+    options: &SignOptions<'_>,
 ) -> Result<Certificate, AppError> {
     let validity = clamp_to_issuer(validity, ca_cert, slot);
     match detect_algorithm(ca_cert)? {
@@ -75,7 +87,7 @@ pub fn sign_loaded_csr(
             csr,
             csr_extensions,
             validity,
-            force_ca,
+            options,
         ),
         CliAlgorithm::EccP384 => sign_with::<p384::NistP384>(
             yubikey,
@@ -84,7 +96,7 @@ pub fn sign_loaded_csr(
             csr,
             csr_extensions,
             validity,
-            force_ca,
+            options,
         ),
     }
 }
@@ -115,7 +127,7 @@ fn sign_with<KT: yubikey::certificate::yubikey_signer::KeyType>(
     csr: &CertReq,
     csr_extensions: &[Extension],
     validity: Validity,
-    force_ca: bool,
+    options: &SignOptions<'_>,
 ) -> Result<Certificate, AppError> {
     let issuer_spki = ca_cert.subject_pki();
     let signer = Signer::<KT>::new(yubikey, slot, issuer_spki.clone())?;
@@ -137,8 +149,9 @@ fn sign_with<KT: yubikey::certificate::yubikey_signer::KeyType>(
         csr_extensions,
         csr.info.public_key.owned_to_ref(),
         issuer_spki,
-        force_ca,
+        options.force_ca,
     )?;
+    add_crl_distribution_points(&mut builder, options.crl_urls)?;
 
     let cert = builder.build()?;
     Ok(Certificate { cert })

@@ -4,12 +4,15 @@ use const_oid::AssociatedOid;
 use const_oid::db::rfc5912::ID_EXTENSION_REQ;
 use tracing::{info, warn};
 use x509_cert::{
-    der::Decode,
+    der::{Decode, asn1::Ia5String},
     ext::{
         Extension,
         pkix::{
-            AuthorityKeyIdentifier, ExtendedKeyUsage, KeyUsage, SubjectAltName,
-            SubjectKeyIdentifier, constraints::BasicConstraints, name::GeneralName,
+            AuthorityKeyIdentifier, CrlDistributionPoints, ExtendedKeyUsage, KeyUsage,
+            SubjectAltName, SubjectKeyIdentifier,
+            constraints::BasicConstraints,
+            crl::dp::DistributionPoint,
+            name::{DistributionPointName, GeneralName},
         },
     },
     request::{CertReq, ExtensionReq},
@@ -176,6 +179,39 @@ pub fn add_supported_csr_extensions<KT: yubikey::certificate::yubikey_signer::Ke
 
     builder.add_extension(&SubjectKeyIdentifier::try_from(csr_spki)?)?;
     builder.add_extension(&AuthorityKeyIdentifier::try_from(issuer_spki)?)?;
+    Ok(())
+}
+
+/// Adds a `CRLDistributionPoints` extension listing `urls`, if any are given,
+/// so a relying party can discover where to fetch the CRL that would list
+/// this certificate if it's ever revoked, instead of that location having to
+/// be configured out-of-band on every relying party. A no-op when `urls` is
+/// empty.
+pub fn add_crl_distribution_points<KT: yubikey::certificate::yubikey_signer::KeyType>(
+    builder: &mut x509_cert::builder::CertificateBuilder<
+        '_,
+        yubikey::certificate::yubikey_signer::Signer<'_, KT>,
+    >,
+    urls: &[String],
+) -> Result<(), AppError> {
+    if urls.is_empty() {
+        return Ok(());
+    }
+
+    let mut points = Vec::with_capacity(urls.len());
+    for url in urls {
+        let uri = Ia5String::new(url)
+            .map_err(|err| AppError::InvalidCsr(format!("invalid --crl-url '{url}': {err}")))?;
+        points.push(DistributionPoint {
+            distribution_point: Some(DistributionPointName::FullName(vec![
+                GeneralName::UniformResourceIdentifier(uri),
+            ])),
+            reasons: None,
+            crl_issuer: None,
+        });
+    }
+
+    builder.add_extension(&CrlDistributionPoints(points))?;
     Ok(())
 }
 

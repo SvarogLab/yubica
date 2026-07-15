@@ -7,8 +7,11 @@ use yubikey::{
 };
 
 use crate::{
-    commands::{get_ca, init_ca, issue_host, list_keys, list_slots, sign_csr},
-    defaults::{CaDefaults, CsrDefaults, GetCaDefaults, HostDefaults, IoDefaults, LoggingDefaults},
+    commands::{gen_crl, get_ca, init_ca, issue_host, list_keys, list_slots, sign_csr},
+    defaults::{
+        CaDefaults, CrlDefaults, CsrDefaults, GetCaDefaults, HostDefaults, IoDefaults,
+        LoggingDefaults,
+    },
     error::AppError,
 };
 
@@ -44,6 +47,7 @@ enum Command {
     InitCa(InitCaArgs),
     GetCa(GetCaArgs),
     SignCsr(SignCsrArgs),
+    GenCrl(GenCrlArgs),
     IssueHost(IssueHostArgs),
 }
 
@@ -209,6 +213,12 @@ pub struct SignCsrArgs {
     pub ca: bool,
     #[arg(
         long,
+        num_args = 1..,
+        help = "URL to advertise via CRLDistributionPoints, so relying parties can find the CRL that would list this certificate if revoked (repeatable; omit to add no such extension)"
+    )]
+    pub crl_url: Vec<String>,
+    #[arg(
+        long,
         default_value = IoDefaults::PATH,
         help = "Directory holding the input CSR and to write the signed certificate into (must already exist)"
     )]
@@ -217,6 +227,51 @@ pub struct SignCsrArgs {
         long,
         default_value = CsrDefaults::FILENAME,
         help = "Base filename shared by the input CSR (<filename>.csr) and the signed certificate (<filename>.crt)"
+    )]
+    pub filename: String,
+}
+
+/// Generate a CRL listing revoked certificate serial numbers, signed by the
+/// CA certificate/key from a YubiKey PIV slot.
+#[derive(Debug, Args)]
+pub struct GenCrlArgs {
+    #[arg(long, env = "YUBICA_SERIAL", help = SERIAL_HELP)]
+    pub serial: u32,
+    #[arg(
+        long,
+        default_value = CrlDefaults::SLOT,
+        value_parser = parse_slot,
+        help = "PIV slot holding the CA certificate/key to sign the CRL with"
+    )]
+    pub slot: SlotId,
+    #[arg(
+        long,
+        help = "Path to a file listing revoked certificates, one 'serial[,date[,reason]]' entry per line (date: YYYY-MM-DD, defaults to now; reason: an RFC 5280 CRLReason name in kebab-case, e.g. key-compromise)"
+    )]
+    pub revoked: PathBuf,
+    #[arg(
+        long,
+        default_value_t = CrlDefaults::NEXT_UPDATE_DAYS,
+        help = "Days until the CRL's nextUpdate"
+    )]
+    pub next_update_days: u32,
+    #[arg(
+        long,
+        help = "CRL number (RFC 5280 CRLNumber extension); omit to skip the extension. The caller is responsible for incrementing it across CRL generations"
+    )]
+    pub crl_number: Option<u64>,
+    #[command(flatten)]
+    pub pin: PinArg,
+    #[arg(
+        long,
+        default_value = IoDefaults::PATH,
+        help = "Directory to write the generated CRL into (must already exist)"
+    )]
+    pub iopath: PathBuf,
+    #[arg(
+        long,
+        default_value = CrlDefaults::FILENAME,
+        help = "Base filename for the generated CRL (produces <filename>.crl)"
     )]
     pub filename: String,
 }
@@ -264,6 +319,12 @@ pub struct IssueHostArgs {
         help = "Password to encrypt the generated private key with (PKCS#8)"
     )]
     pub passwd: Option<String>,
+    #[arg(
+        long,
+        num_args = 1..,
+        help = "URL to advertise via CRLDistributionPoints, so relying parties can find the CRL that would list this certificate if revoked (repeatable; omit to add no such extension)"
+    )]
+    pub crl_url: Vec<String>,
     #[arg(
         long,
         default_value = IoDefaults::PATH,
@@ -327,6 +388,7 @@ pub fn run(cli: Cli) -> Result<(), AppError> {
         Command::InitCa(args) => init_ca::run(&args),
         Command::GetCa(args) => get_ca::run(&args),
         Command::SignCsr(args) => sign_csr::run(&args),
+        Command::GenCrl(args) => gen_crl::run(&args),
         Command::IssueHost(args) => issue_host::run(&args),
     }
 }

@@ -13,6 +13,10 @@ pub enum AppError {
     Builder(#[from] x509_cert::builder::Error),
     #[error(transparent)]
     Pkcs8(#[from] pkcs8::Error),
+    #[error(transparent)]
+    Signature(#[from] signature::Error),
+    #[error(transparent)]
+    Spki(#[from] x509_cert::spki::Error),
     #[error("invalid subject: {0}")]
     InvalidSubject(String),
     #[error("invalid management key hex: {0}")]
@@ -45,4 +49,6 @@ pub enum AppError {
         "csr requests CA capabilities (BasicConstraints CA:TRUE or KeyUsage keyCertSign/cRLSign) but --ca was not passed; pass --ca to sign it as an intermediate CA, or resubmit a CSR without those extensions"
     )]
     CsrRequestsCaWithoutCaFlag,
+    #[error("invalid revoked-certificate list: {0}")]
+    InvalidCrlInput(String),
 }

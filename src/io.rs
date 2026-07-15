@@ -45,6 +45,10 @@ impl OutputPlan {
         self.with_extension("csr")
     }
 
+    pub fn crl_path(&self) -> PathBuf {
+        self.with_extension("crl")
+    }
+
     fn with_extension(&self, extension: &str) -> PathBuf {
         self.dir.join(format!("{}.{}", self.filename, extension))
     }
@@ -82,6 +86,7 @@ mod tests {
         assert_eq!(plan.crt_path(), dir.0.join("offline-root-ca.crt"));
         assert_eq!(plan.key_path(), dir.0.join("offline-root-ca.key"));
         assert_eq!(plan.csr_path(), dir.0.join("offline-root-ca.csr"));
+        assert_eq!(plan.crl_path(), dir.0.join("offline-root-ca.crl"));
     }
 
     #[test]

@@ -8,7 +8,7 @@ use crate::{
     hardware::device::{open_yubikey, print_device_info},
     io::OutputPlan,
     pki::csr::{csr_requested_extensions, load_csr, print_csr_details},
-    pki::sign::sign_and_export,
+    pki::sign::{SignOptions, sign_and_export},
     pki::validity::build_validity,
 };
 
@@ -32,6 +32,10 @@ pub fn run(args: &SignCsrArgs) -> Result<(), AppError> {
         args.validity.valid_days,
         CsrDefaults::VALID_YEARS,
     )?;
+    let options = SignOptions {
+        force_ca: args.ca,
+        crl_urls: &args.crl_url,
+    };
     sign_and_export(
         &mut yubikey,
         args.slot,
@@ -39,7 +43,7 @@ pub fn run(args: &SignCsrArgs) -> Result<(), AppError> {
         &csr,
         &csr_extensions,
         validity,
-        args.ca,
+        &options,
         &output,
     )?;
 

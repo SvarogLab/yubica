@@ -16,6 +16,7 @@
 - Инициализация self-signed root CA в слоте YubiKey
 - Получение сертификата из PIV-слота YubiKey
 - Подпись существующего CSR через CA-ключ на YubiKey
+- Генерация CRL со списком отозванных серийников, подписанного CA-ключом на YubiKey
 - Локальная генерация host private key и CSR с последующей подписью через CA на YubiKey
 
 ## Выбор устройства
@@ -241,6 +242,62 @@ CA никогда не выпускает сертификат, пережива
 `not_after` молча ограничивается сроком действия издателя (при этом в лог
 пишется warning).
 
+`--crl-url <URI>` (можно несколько раз) добавляет в выпускаемый сертификат расширение
+`CRLDistributionPoints`, чтобы проверяющая сторона могла найти CRL, где искать этот сертификат,
+если его отзовут — вместо того чтобы прописывать это место в конфиге каждой проверяющей стороны:
+
+```powershell
+yubica sign-csr --serial 12345678 --ca --crl-url http://ca.example.internal/root.crl --pin 123456 --iopath . --filename intermediate
+```
+
+Без флага расширение не добавляется (поведение по умолчанию).
+
+### `gen-crl`
+
+Генерирует CRL (Certificate Revocation List) со списком серийников отозванных сертификатов,
+подписанный CA-сертификатом/ключом из PIV-слота YubiKey.
+
+```powershell
+yubica gen-crl --serial 12345678 --pin 123456 --revoked .\revoked.txt --iopath . --filename revoked
+```
+
+`revoked.txt` — по одной записи на строку, `serial[,дата[,причина]]`:
+
+```text
+# строки с # и пустые строки игнорируются
+1A2B3C4D5E,2026-01-15,key-compromise
+9F8E7D6C5B
+```
+
+- `serial` — hex (разделители `:`/пробел допустимы), обязательно
+- `дата` — `YYYY-MM-DD`, опционально; по умолчанию — момент запуска `gen-crl`
+- `причина` — имя `CRLReason` из RFC 5280 в kebab-case (`unspecified`, `key-compromise`,
+  `ca-compromise`, `affiliation-changed`, `superseded`, `cessation-of-operation`,
+  `certificate-hold`, `remove-from-crl`, `privilege-withdrawn`, `aa-compromise`), опционально
+
+Результат:
+
+- `revoked.crl`
+
+Замечания:
+
+- слот по умолчанию: `9c`
+- `--next-update-days` задаёт, насколько далеко `nextUpdate` (по умолчанию `30`)
+- `--crl-number` задаёт расширение `CRLNumber`; без флага расширение не добавляется. `yubica` не
+  хранит состояние между запусками, так что увеличивать номер от CRL к CRL — ответственность
+  вызывающего
+- CRL всегда несёт расширение `AuthorityKeyIdentifier`, указывающее на выпустивший CA
+- достаточно знать только серийники на отзыв — сами исходные сертификаты не нужны: записи
+  `RevokedCert` по RFC 5280 нужен только serial и дата отзыва
+- инструмент нигде не хранит серийники уже выпущенных сертификатов; если сами их не вели —
+  восстановить serial из уже выданного сертификата можно через
+  `openssl x509 -in cert.crt -noout -serial`
+- передайте тот же URL(ы) в `--crl-url` на `sign-csr`/`issue-host` при выпуске сертификатов, чтобы
+  они несли расширение `CRLDistributionPoints`, указывающее туда, где вы публикуете этот CRL; без
+  этого проверяющей стороне нужно сообщать место CRL вне сертификата
+- к root-сертификату `init-ca` это не относится: стандартные валидаторы не проверяют CDP/OCSP на
+  trust anchor, только на сертификатах ниже него в цепочке
+
 ### `issue-host`
 
 Локально генерирует host private key, создаёт CSR, подписывает его через CA на YubiKey и записывает все артефакты на диск.
@@ -265,6 +322,9 @@ yubica issue-host --serial 12345678 --host api.example.internal --host 10.10.10.
 ```powershell
 yubica issue-host --serial 12345678 --host api.example.internal --pin 123456 --passwd changeit --iopath . --filename api-example
 ```
+
+Как и у `sign-csr`, `--crl-url <URI>` (можно несколько раз) добавляет расширение
+`CRLDistributionPoints`, указывающее на CRL, где искать этот host-сертификат в случае отзыва.
 
 ## Air-gapped OpenBao intermediate flow
 
@@ -314,8 +374,8 @@ yubica sign-csr --serial 12345678 --ca --pin 123456 --iopath . --filename interm
 затрагивается, ни один из этих тестов не требует подключённого YubiKey.
 
 Отдельный набор в `tests/hardware.rs` прогоняет реальное железо end-to-end
-(`list-keys`-подобное перечисление там не покрыто, но `get-ca`, `init-ca` и
-`issue-host` — да). Он никогда не запускается по умолчанию:
+(`list-keys`-подобное перечисление там не покрыто, но `get-ca`, `init-ca`,
+`sign-csr`, `gen-crl` и `issue-host` — да). Он никогда не запускается по умолчанию:
 
 ```powershell
 $env:YUBICA_TEST_SERIAL = "12345678"     # обязательно: нужно каждому тесту
@@ -356,6 +416,8 @@ yubica init-ca --serial 12345678 --pin 654321 --mgm-key-hex 01020304050607080102
 yubica get-ca --serial 12345678 --iopath . --filename current-ca
 
 yubica sign-csr --serial 12345678 --ca --pin 123456 --iopath . --filename intermediate
+
+yubica gen-crl --serial 12345678 --pin 123456 --revoked .\revoked.txt --iopath . --filename revoked
 
 yubica issue-host --serial 12345678 --host app.example.internal --host 10.0.0.10 --pin 123456 --iopath . --filename app
 ```

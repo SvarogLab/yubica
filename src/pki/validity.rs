@@ -31,15 +31,22 @@ pub fn build_validity(
             valid_years.unwrap_or(default_years),
         )?
     };
-    let not_after = if not_after_date_time.year() <= UtcTime::MAX_YEAR {
-        Time::from(UtcTime::from_date_time(not_after_date_time)?)
-    } else {
-        Time::from(GeneralizedTime::from_date_time(not_after_date_time))
-    };
 
     Ok(Validity {
         not_before,
-        not_after,
+        not_after: time_from_date_time(not_after_date_time)?,
+    })
+}
+
+/// Encodes `date_time` as the narrower `UtcTime` (RFC 5280 requires it for
+/// years up to 2049) or falls back to `GeneralizedTime` beyond that range.
+/// Shared by certificate validity windows and CRL entry/this-/next-update
+/// timestamps, which all need the same year-based choice of ASN.1 time type.
+pub fn time_from_date_time(date_time: DateTime) -> Result<Time, AppError> {
+    Ok(if date_time.year() <= UtcTime::MAX_YEAR {
+        Time::from(UtcTime::from_date_time(date_time)?)
+    } else {
+        Time::from(GeneralizedTime::from_date_time(date_time))
     })
 }
 

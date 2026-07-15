@@ -10,7 +10,7 @@ use crate::{
     io::OutputPlan,
     pki::csr::csr_requested_extensions,
     pki::host_csr::{csr_pem, csr_ref, generate_host_artifacts, host_subject, private_key_pem},
-    pki::sign::sign_and_export,
+    pki::sign::{SignOptions, sign_and_export},
     pki::validity::build_validity,
 };
 
@@ -40,6 +40,10 @@ pub fn run(args: &IssueHostArgs) -> Result<(), AppError> {
         HostDefaults::VALID_YEARS,
     )?;
     let csr_extensions = csr_requested_extensions(csr_ref(&artifacts))?;
+    let options = SignOptions {
+        force_ca: false,
+        crl_urls: &args.crl_url,
+    };
     sign_and_export(
         &mut yubikey,
         args.slot,
@@ -47,7 +51,7 @@ pub fn run(args: &IssueHostArgs) -> Result<(), AppError> {
         csr_ref(&artifacts),
         &csr_extensions,
         validity,
-        false,
+        &options,
         &output,
     )?;
 
