@@ -388,8 +388,8 @@ yubica sign-csr --serial 12345678 --ca --pin 123456 --iopath . --filename interm
 `cargo test` runs the unit test suite (pure logic: validity/calendar math, CSR
 subject/SAN handling, management-key parsing, OID-based algorithm detection,
 output-path validation). No hardware is touched and nothing here requires a
-connected YubiKey. CI runs it with clippy on every push and pull request, and
-daily on `main`, on Linux and Windows for amd64 and arm64.
+connected YubiKey. CI runs it with clippy on every pull request, every push to
+`main` and daily, on Linux and Windows for amd64 and arm64.
 
 A separate suite in `tests/hardware.rs` exercises real hardware end-to-end
 (`list-keys`-style enumeration is not covered there, but `get-ca`, `init-ca`,
