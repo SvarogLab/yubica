@@ -19,6 +19,22 @@ The tool is designed for air-gapped or semi-air-gapped workflows where:
 - Generate a CRL listing revoked certificate serial numbers, signed by a YubiKey-backed CA key
 - Generate a host private key and CSR locally, then sign it with the YubiKey-backed CA
 
+## Installation
+
+Each [release](https://github.com/ffaxl/tools-yubica/releases) carries `yubica-linux-amd64`,
+`yubica-linux-arm64`, `yubica-windows-amd64.exe` and `yubica-windows-arm64.exe`, with their
+checksums in `SHA256SUMS`. Each is built and tested on its own system and architecture's runner.
+
+- **Windows** talks to the card through the built-in smart card service; nothing else is needed.
+- **Linux** talks to it through pcsc-lite, which the binary links dynamically: install the
+  `libpcsclite1` and `pcscd` packages (or your distribution's equivalent) and keep `pcscd`
+  running. The binary is built against the glibc of the current Ubuntu release, so an older
+  distribution may need a build from source (`cargo build --release`, with `libpcsclite-dev`).
+
+To release, run the **Release PR** workflow from the Actions tab. It opens `chore: release
+vX.Y.Z` with the version git-cliff computes from the commits since the last tag and a regenerated
+`CHANGELOG.md`; merging it tags the commit and publishes the release.
+
 ## Selecting a device
 
 Every command except `list-keys` requires `--serial` (or `YUBICA_SERIAL`) to
@@ -372,7 +388,8 @@ yubica sign-csr --serial 12345678 --ca --pin 123456 --iopath . --filename interm
 `cargo test` runs the unit test suite (pure logic: validity/calendar math, CSR
 subject/SAN handling, management-key parsing, OID-based algorithm detection,
 output-path validation). No hardware is touched and nothing here requires a
-connected YubiKey.
+connected YubiKey. CI runs it with clippy on every push and pull request, and
+daily on `main`, on Linux and Windows for amd64 and arm64.
 
 A separate suite in `tests/hardware.rs` exercises real hardware end-to-end
 (`list-keys`-style enumeration is not covered there, but `get-ca`, `init-ca`,
