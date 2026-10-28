@@ -19,7 +19,7 @@ const-oid = "0.9"
 signature = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-x509-cert = { version = "0.2", features = ["builder"] }
+x509-cert = { version = "0.3", features = ["builder"] }
 thiserror = "2"
 yubikey = "0.8"
 
