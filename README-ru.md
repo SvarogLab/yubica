@@ -21,7 +21,7 @@
 
 ## Установка
 
-Каждый [релиз](https://github.com/ffaxl/tools-yubica/releases) содержит `yubica-linux-amd64`,
+Каждый [релиз](https://github.com/SvarogLab/yubica/releases) содержит `yubica-linux-amd64`,
 `yubica-linux-arm64`, `yubica-windows-amd64.exe` и `yubica-windows-arm64.exe`, с контрольными
 суммами в `SHA256SUMS`. Каждый собран и протестирован на раннере своей системы и архитектуры.
 

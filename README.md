@@ -21,7 +21,7 @@ The tool is designed for air-gapped or semi-air-gapped workflows where:
 
 ## Installation
 
-Each [release](https://github.com/ffaxl/tools-yubica/releases) carries `yubica-linux-amd64`,
+Each [release](https://github.com/SvarogLab/yubica/releases) carries `yubica-linux-amd64`,
 `yubica-linux-arm64`, `yubica-windows-amd64.exe` and `yubica-windows-arm64.exe`, with their
 checksums in `SHA256SUMS`. Each is built and tested on its own system and architecture's runner.
 
