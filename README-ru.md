@@ -351,13 +351,17 @@ yubica sign-csr --serial 12345678 --ca --pin 123456 --iopath . --filename interm
 
 ## Замечания по безопасности
 
-- Поддерживается только ECC (`ecc-p256`, `ecc-p384`); RSA удалён из проекта. Заодно это снимает
-  вопрос с непропатченным advisory о тайминговой атаке Marvin в крейте `rsa` (RUSTSEC-2023-0071) —
-  он больше не актуален, так как этот крейт не используется как зависимость
+- Поддерживается только ECC (`ecc-p256`, `ecc-p384`); RSA удалён из проекта. Крейт `rsa` всё ещё
+  подтягивается через `yubikey`, который поддерживает RSA-слоты, но RSA-операций здесь нет, поэтому
+  его непропатченный advisory о тайминговой атаке Marvin (RUSTSEC-2023-0071) принят в
+  `.cargo/audit.toml`
 - Предпочитайте `YUBICA_PIN`/`YUBICA_MGM_KEY_HEX`/`YUBICA_PASSWD` вместо соответствующих
   CLI-флагов, чтобы не оставлять секреты в истории шелла и списке процессов
 - Root private key остаётся на YubiKey при `init-ca` и `sign-csr`
-- `issue-host` намеренно генерирует host private key локально, а не на YubiKey
+- `issue-host` намеренно генерирует host private key локально, а не на YubiKey. Делает он это
+  через кривые RustCrypto 0.13, чей `crypto-bigint` не constant-time (RUSTSEC-2026-0387); за запуск
+  один ключ подписывает один CSR, поэтому этот advisory тоже принят в `.cargo/audit.toml` — до тех
+  пор, пока `yubikey` 0.9 не переведёт оба на исправленные релизы
 - Заводской management key не должен использоваться в production-процедурах
 - Factory-default PIN должен быть заменён до `init-ca`; CLI жёстко запрещает default management
   key и отклоняет default PIN

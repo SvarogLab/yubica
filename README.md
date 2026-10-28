@@ -348,13 +348,17 @@ yubica sign-csr --serial 12345678 --ca --pin 123456 --iopath . --filename interm
 
 ## Security notes
 
-- Only ECC (`ecc-p256`, `ecc-p384`) is supported; RSA was removed. This also sidesteps the
-  RustCrypto `rsa` crate's unpatched Marvin timing-sidechannel advisory (RUSTSEC-2023-0071), which
-  no longer applies since the crate isn't a dependency
+- Only ECC (`ecc-p256`, `ecc-p384`) is supported; RSA was removed. The RustCrypto `rsa` crate is
+  still linked through `yubikey`, which supports RSA slots, but no RSA operation runs here, so its
+  unpatched Marvin timing-sidechannel advisory (RUSTSEC-2023-0071) is accepted in
+  `.cargo/audit.toml`
 - Prefer `YUBICA_PIN`/`YUBICA_MGM_KEY_HEX`/`YUBICA_PASSWD` over the equivalent CLI flags to avoid
   leaking secrets into shell history and process listings
 - The root private key stays on the YubiKey for `init-ca` and `sign-csr`
-- `issue-host` intentionally generates the host private key locally, not on the YubiKey
+- `issue-host` intentionally generates the host private key locally, not on the YubiKey. It does
+  so through the 0.13 RustCrypto curves, whose `crypto-bigint` is not constant-time
+  (RUSTSEC-2026-0387); one key signs one CSR per run, so that advisory is accepted in
+  `.cargo/audit.toml` too, until `yubikey` 0.9 moves both to fixed releases
 - Factory default management keys should not be kept in production workflows
 - Factory default PINs must be rotated before `init-ca`; the CLI refuses default management keys
   and rejects the default PIN

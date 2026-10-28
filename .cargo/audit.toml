@@ -1,0 +1,13 @@
+# Both advisories reach yubica only through yubikey 0.8 and the 0.13 RustCrypto curves it
+# pins, and neither has a fixed release on that line. yubikey 0.9 moves to rsa 0.10 and the
+# 0.14 curves; drop both entries once it is stable and this crate is on it.
+[advisories]
+ignore = [
+    # rsa: the Marvin timing attack on RSA private-key operations. yubica is ECC-only
+    # (P-256 and P-384); rsa is linked only because yubikey supports RSA slots.
+    "RUSTSEC-2023-0071",
+    # crypto-bigint 0.5: operations meant to be constant-time are not. The one local
+    # private-key use is issue-host, which signs a single CSR with a key generated for that
+    # run, so there is no repeated operation for an observer to time.
+    "RUSTSEC-2026-0387",
+]
