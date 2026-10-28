@@ -13,7 +13,7 @@ hex = "0.4"
 p256 = { version = "0.13", features = ["pkcs8", "pem"] }
 p384 = { version = "0.13", features = ["pkcs8", "pem"] }
 pem-rfc7468 = { version = "1.0", features = ["alloc"] }
-pkcs8 = { version = "0.10", features = ["encryption", "pem"] }
+pkcs8 = { version = "0.11", features = ["encryption", "pem"] }
 rand = "0.8"
 const-oid = "0.9"
 signature = "2"
