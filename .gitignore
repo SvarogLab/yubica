@@ -1,3 +1,4 @@
 /target
 .claude/settings.local.json
 hardware-test-secrets.local.ps1
+/Cargo.lock
