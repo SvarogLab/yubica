@@ -1,4 +1,11 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["github>SvarogLab/.github"]
+  "extends": ["github>SvarogLab/.github"],
+  "packageRules": [
+    {
+      "description": "yubikey 0.8 pins the 0.13 RustCrypto line, and these only build against the line yubikey uses. They move in yubikey 0.9's own pull request, once it is stable.",
+      "matchPackageNames": ["p256", "p384", "pkcs8", "x509-cert", "const-oid", "signature", "rand"],
+      "enabled": false
+    }
+  ]
 }

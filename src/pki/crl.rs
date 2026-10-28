@@ -138,16 +138,21 @@ fn parse_reason(field: &str) -> Result<CrlReason, String> {
     }
 }
 
-/// Computes `nextUpdate` as `next_update_days` from now, without the panic
-/// that `SystemTime`'s `Add<Duration>` operator would raise if the result
-/// can't be represented (e.g. an accidentally huge `--next-update-days`).
-fn checked_next_update(next_update_days: u32) -> Result<SystemTime, AppError> {
+/// Computes `nextUpdate` as `next_update_days` from now, as the X.509 time the
+/// CRL carries. Either limit can be hit first - `SystemTime`'s range differs by
+/// platform (Windows ends in the year 30828, Linux far beyond), while X.509's
+/// GeneralizedTime ends in 9999 - so both are checked here, and an accidentally
+/// huge `--next-update-days` is the same error everywhere instead of a panic.
+fn checked_next_update(next_update_days: u32) -> Result<Time, AppError> {
     let duration = Duration::from_secs(u64::from(next_update_days) * 24 * 60 * 60);
-    SystemTime::now().checked_add(duration).ok_or_else(|| {
-        AppError::InvalidCrlInput(format!(
-            "--next-update-days {next_update_days} is too large to represent"
-        ))
-    })
+    SystemTime::now()
+        .checked_add(duration)
+        .and_then(|at| Time::try_from(at).ok())
+        .ok_or_else(|| {
+            AppError::InvalidCrlInput(format!(
+                "--next-update-days {next_update_days} is too large to represent"
+            ))
+        })
 }
 
 /// Builds a CRL listing `revoked` and signs it with the CA certificate/key
@@ -196,7 +201,7 @@ fn sign_crl_with<KT: KeyType>(
     let signature_algorithm = signer.signature_algorithm_identifier()?;
 
     let this_update = Time::try_from(SystemTime::now())?;
-    let next_update = Time::try_from(checked_next_update(next_update_days)?)?;
+    let next_update = checked_next_update(next_update_days)?;
 
     let revoked_certificates = if revoked.is_empty() {
         None
@@ -301,6 +306,18 @@ mod tests {
     #[test]
     fn checked_next_update_rejects_overflow_instead_of_panicking() {
         assert!(checked_next_update(u32::MAX).is_err());
+    }
+
+    #[test]
+    fn checked_next_update_rejects_a_date_x509_cannot_encode() {
+        // About the year 10200: inside SystemTime's range on every platform, past the year 9999
+        // that X.509's GeneralizedTime ends at.
+        assert!(checked_next_update(3_000_000).is_err());
+    }
+
+    #[test]
+    fn checked_next_update_accepts_an_ordinary_interval() {
+        assert!(checked_next_update(30).is_ok());
     }
 
     #[test]
